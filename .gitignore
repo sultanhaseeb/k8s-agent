@@ -1,0 +1,33 @@
+# Go build and test output
+/go-svc/go-svc
+/go-svc/cluster-info
+*.test
+*.out
+/bin/
+/dist/
+
+# Python environments and caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.claude/
+kubeconfig
+*.kubeconfig
+
+# Helm-generated files
+charts/**/charts/
+*.tgz
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp

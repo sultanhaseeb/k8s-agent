@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>k8sagnet</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">⎈</span>
+        <span class="brand-name">k8sagnet</span>
+      </div>
+      <nav id="nav">
+        <button class="nav-item active" data-tab="cluster-info">Cluster Info</button>
+      </nav>
+      <div class="sidebar-foot">
+        <button id="refresh" class="refresh">Refresh</button>
+        <p id="stamp" class="stamp"></p>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="tab active" id="tab-cluster-info">
+        <header class="page-head">
+          <h1>Cluster Info</h1>
+          <p class="source">
+            served by <code>go-svc</code> &middot; client-go against the in-cluster API
+          </p>
+        </header>
+
+        <!-- 1. Cluster-level summary + nodes -->
+        <div class="panel" id="cluster-panel">
+          <div id="cluster-error" class="error" hidden></div>
+          <div class="stat-row" id="stats"></div>
+          <h2>Nodes <span class="h2-note">cluster-scoped</span></h2>
+          <div class="table-wrap"><table id="nodes-table">
+            <thead><tr>
+              <th>Name</th><th>Status</th><th>Roles</th><th>Version</th>
+              <th>Internal IP</th><th>CPU</th><th>Memory</th><th>OS</th><th>Age</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+
+        <!-- 2. Namespace selector -->
+        <div class="scope-bar">
+          <label for="ns-select">Namespace</label>
+          <select id="ns-select">
+            <option value="">All namespaces</option>
+          </select>
+          <span id="scope-note" class="scope-note"></span>
+        </div>
+
+        <!-- 3. One tab per resource kind, table below -->
+        <div class="panel resources">
+          <div class="kind-tabs" id="kind-tabs" role="tablist"></div>
+          <div class="kind-body">
+            <div class="kind-head">
+              <h2 id="kind-heading">Pods</h2>
+              <span id="kind-count" class="kind-count"></span>
+            </div>
+            <p class="row-hint">Right-click any row to ask the agent about it.</p>
+            <div id="resource-error" class="error" hidden></div>
+            <div class="table-wrap"><table id="resource-table">
+              <thead><tr></tr></thead>
+              <tbody></tbody>
+            </table></div>
+
+            <div class="pager">
+              <button id="page-prev" class="page-btn">‹ Prev</button>
+              <span id="page-info" class="page-info"></span>
+              <button id="page-next" class="page-btn">Next ›</button>
+              <span class="pager-spacer"></span>
+              <label for="page-size">Rows per page</label>
+              <select id="page-size">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Delete confirmation: the pod name must be typed to arm the button. -->
+  <dialog id="confirm-dialog">
+    <div class="dialog-body">
+      <h3>Delete pod</h3>
+      <p class="dialog-target"><code id="confirm-target"></code></p>
+      <p class="dialog-note">
+        The Claude CLI agent will inspect this pod, delete it, and report back.
+        go-svc has no delete permission of its own.
+      </p>
+      <label for="confirm-input">Type the pod name to confirm</label>
+      <input id="confirm-input" autocomplete="off" spellcheck="false" />
+      <div class="dialog-actions">
+        <button type="button" id="confirm-cancel" class="page-btn">Cancel</button>
+        <button type="button" id="confirm-go" class="danger-btn" disabled>Delete</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Right-click a row to ask the agent about that resource. -->
+  <dialog id="chat-dialog">
+    <div class="chat-shell">
+      <header class="chat-head">
+        <div>
+          <h3 id="chat-title">Ask about this resource</h3>
+          <p class="chat-subject"><code id="chat-target"></code></p>
+        </div>
+        <button type="button" id="chat-close" class="task-close" aria-label="Close">×</button>
+      </header>
+
+      <div id="chat-log" class="chat-log"></div>
+
+      <form id="chat-form" class="chat-form">
+        <textarea id="chat-input" rows="2" placeholder="e.g. show me the env variables of this pod"
+                  autocomplete="off"></textarea>
+        <div class="chat-actions">
+          <span id="chat-hint" class="chat-hint">Enter to send &middot; Shift+Enter for a new line</span>
+          <button type="submit" id="chat-send" class="page-btn">Ask</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Live task status; shows the agent's transcript when it finishes. -->
+  <div id="task-panel" class="task-panel" hidden>
+    <div class="task-head">
+      <span id="task-status" class="task-status"></span>
+      <span id="task-target" class="task-target"></span>
+      <button id="task-close" class="task-close" aria-label="Close">×</button>
+    </div>
+    <div id="task-transcript" class="task-transcript md"></div>
+  </div>
+
+  <script src="/md.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

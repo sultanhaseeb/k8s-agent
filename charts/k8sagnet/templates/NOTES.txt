@@ -1,0 +1,31 @@
+k8sagnet is deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+  frontend    nginx UI, proxies /api/ to go-svc
+  go-svc      the single API: cluster info, resource tabs, action policy gate
+{{- if .Values.agentSvc.enabled }}
+  agent-svc   Claude CLI + kubectl; performs actions go-svc is not allowed to
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+
+Open the UI at:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+
+Open the UI locally:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "k8sagnet.fullname" . }}-frontend 8080:{{ .Values.frontend.service.port }}
+  open http://localhost:8080
+{{- end }}
+
+{{- if .Values.agentSvc.enabled }}
+
+ONE MANUAL STEP: the agent needs a Claude CLI login before Delete will work.
+Log in interactively — the credentials persist on the agent's volume:
+
+  kubectl --namespace {{ .Release.Namespace }} exec -it deploy/{{ include "k8sagnet.fullname" . }}-agent-svc -- claude
+
+Agent may act in: {{ join ", " .Values.agentSvc.policy.allowedNamespaces }}
+Always refused: kube-system, kube-public, kube-node-lease
+{{- end }}

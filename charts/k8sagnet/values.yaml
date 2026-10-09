@@ -1,0 +1,107 @@
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+# Cluster DNS service, used as the nginx resolver so upstream lookups happen
+# per-request rather than only at nginx startup.
+dnsResolver: kube-dns.kube-system.svc.cluster.local
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: k8sagnet-frontend
+    tag: "0.2.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 128Mi}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+
+goSvc:
+  replicaCount: 2
+  image:
+    repository: k8sagnet-go-svc
+    tag: "0.2.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {cpu: 300m, memory: 128Mi}
+  # distroless nonroot
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+  rbac:
+    create: true
+    # Grants list on Secrets so the Secrets tab works. The service only ever
+    # returns key names, never values, but the RBAC grant itself is broad —
+    # set to false to remove it.
+    allowSecrets: true
+
+# Claude CLI + kubectl behind a small FastAPI wrapper. go-svc hands it the
+# actions it is not allowed to perform itself.
+agentSvc:
+  enabled: true
+  image:
+    repository: k8sagnet-agent-svc
+    tag: "0.6.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: 1000m, memory: 1Gi}
+  # uid 1000 is the `node` user in the image; fsGroup lets it write the PVC.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  rbac:
+    create: true
+  policy:
+    # Namespaces the agent may act in. kube-system, kube-public and
+    # kube-node-lease are refused by both services regardless of this list.
+    allowedNamespaces:
+      - demo
+    deniedNamespaces: []
+  taskTimeoutSeconds: 120
+  persistence:
+    # Holds the CLI login across restarts. Disable and you must re-login
+    # after every pod restart.
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+
+# Applied to every container in the chart.
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: k8sagnet.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

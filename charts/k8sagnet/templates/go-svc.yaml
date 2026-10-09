@@ -1,0 +1,151 @@
+{{- $ctx := dict "root" . "component" "go-svc" -}}
+{{- $name := printf "%s-go-svc" (include "k8sagnet.fullname" .) -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "k8sagnet.labels" $ctx | nindent 4 }}
+{{- if .Values.goSvc.rbac.create }}
+---
+# Read-only across everything the UI can browse: cluster-scoped nodes and
+# namespaces, plus the namespaced kinds behind the resource tabs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "k8sagnet.labels" $ctx | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - namespaces
+      - pods
+      - services
+      - configmaps
+      - serviceaccounts
+      - persistentvolumeclaims
+      - endpoints
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list"]
+  {{- if .Values.goSvc.rbac.allowSecrets }}
+  # NOTE: listing Secrets returns their values to this service, even though
+  # the API only ever sends key names to the browser. Set
+  # goSvc.rbac.allowSecrets=false to drop this rule; the Secrets tab then
+  # shows a 403 instead.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "k8sagnet.labels" $ctx | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "k8sagnet.labels" $ctx | nindent 4 }}
+spec:
+  type: {{ .Values.goSvc.service.type }}
+  ports:
+    - port: {{ .Values.goSvc.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "k8sagnet.selectorLabels" $ctx | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "k8sagnet.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ .Values.goSvc.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "k8sagnet.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "k8sagnet.selectorLabels" $ctx | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ $name }}
+      securityContext:
+        {{- toYaml .Values.goSvc.securityContext | nindent 8 }}
+      containers:
+        - name: go-svc
+          image: "{{ .Values.goSvc.image.repository }}:{{ .Values.goSvc.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.goSvc.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.goSvc.service.targetPort }}
+          env:
+            - name: PORT
+              value: {{ .Values.goSvc.service.targetPort | quote }}
+            {{- if .Values.agentSvc.enabled }}
+            # Where to hand off actions, and the policy this service enforces
+            # before it does.
+            - name: AGENT_URL
+              value: "http://{{ include "k8sagnet.fullname" . }}-agent-svc.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.agentSvc.service.port }}"
+            - name: ALLOWED_NAMESPACES
+              value: {{ join "," .Values.agentSvc.policy.allowedNamespaces | quote }}
+            - name: DENIED_NAMESPACES
+              value: {{ join "," .Values.agentSvc.policy.deniedNamespaces | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.goSvc.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

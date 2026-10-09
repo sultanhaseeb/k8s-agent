@@ -1,0 +1,42 @@
+{{- $ctx := dict "root" . "component" "frontend" -}}
+{{- $name := printf "%s-frontend" (include "k8sagnet.fullname" .) -}}
+{{- $goHost := include "k8sagnet.svcHost" (dict "root" . "component" "go-svc") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "k8sagnet.labels" $ctx | nindent 4 }}
+data:
+  default.conf: |
+    server {
+        listen {{ .Values.frontend.service.targetPort }};
+        server_name _;
+
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # Upstreams are held in variables so nginx resolves them per request;
+        # a literal proxy_pass would resolve once at startup and fail if a
+        # backend Service does not exist yet.
+        resolver {{ .Values.dnsResolver }} valid=10s ipv6=off;
+
+        location = /healthz {
+            access_log off;
+            return 200 "ok\n";
+        }
+
+        # Everything the UI calls is served by go-svc. $request_uri carries
+        # the original path and query through unchanged.
+        location ^~ /api/ {
+            set $go_svc "{{ $goHost }}";
+            proxy_pass http://$go_svc:{{ .Values.goSvc.service.port }}$request_uri;
+            proxy_set_header Host $host;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 30s;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+    }
